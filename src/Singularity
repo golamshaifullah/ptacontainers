@@ -1,0 +1,50 @@
+Bootstrap: docker
+From: ghcr.io/nvidia/jax:base
+%files
+    # Copy discovery-gpu.yml into the container
+    discovery-gpu.yml /tmp/discovery-gpu.yml
+
+%post
+    # Basic system updates
+    apt-get update && apt-get install -y --no-install-recommends \
+        wget \
+        bzip2 \
+        ca-certificates \
+        git \
+        build-essential \
+        && rm -rf /opt/lib/apt/lists/*
+
+    # ----------------------------------------------------------------
+    # Install Miniconda
+    # ----------------------------------------------------------------
+    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O $SINGULARITY_CONTAINER/tmp/miniconda.sh
+    bash $SINGULARITY_CONTAINER/tmp/miniconda.sh -b -p /opt/conda
+    rm -f $SINGULARITY_CONTAINER/tmp/miniconda.sh
+
+    # Set up conda-forge, nvidia channels (for best GPU coverage)
+    /opt/conda/bin/conda config --system --add channels conda-forge
+    /opt/conda/bin/conda config --system --add channels nvidia
+    /opt/conda/bin/conda config --system --add channels defaults
+    # Optionally set channel_priority to 'flexible' or 'strict'
+    /opt/conda/bin/conda config --system --set channel_priority flexible
+
+    # ----------------------------------------------------------------
+    # Create the conda discovery-gpu from the discovery-gpu.yml
+    # ----------------------------------------------------------------
+    /opt/conda/bin/conda env create -f $SINGULARITY_CONTAINER/tmp/discovery-gpu.yml
+
+    # Clean up conda caches
+    /opt/conda/bin/conda clean --all --yes
+
+%environment
+    # This section is executed for *every* shell/exec/run within the container
+    # so we automatically activate the environment each time.
+    source /opt/conda/etc/profile.d/conda.sh
+    conda activate discovery-gpu-env
+    # Prepend conda's python to PATH so e.g. "python" picks the GPU env
+    export PATH="/opt/conda/envs/discovery-gpu-env/bin:${PATH}"
+
+%runscript
+    # This script runs when you do singularity run discovery.sif
+    # By default, let's just drop into a shell
+    exec "$@"
